@@ -59,11 +59,31 @@ class LinearClassifier(nn.Module):
 
 
 class MLPClassifier(nn.Module):
+    class Block(torch.nn.Module):
+        def __init__(self, in_channels, out_channels):
+            super().__init__()
+            self.model = torch.nn.Sequential(
+                torch.nn.Linear(in_channels, out_channels),
+                torch.nn.LayerNorm(out_channels),
+                torch.nn.ReLU(),
+            )  # Add a layer before the residual connection
+
+            # Validate the number of input channels matches the number of output channels for the residual connections
+            if in_channels != out_channels:
+                self.skip = torch.nn.Linear(in_channels,
+                                            out_channels)  # Add a linear layer to change the shape and match the output
+            else:
+                self.skip = torch.nn.Identity()
+
+        def forward(self, x):
+            return self.model(x) + self.skip(x)  # By adding `x`, we have added a residual connection
+
     def __init__(
         self,
         h: int = 64,
         w: int = 64,
         num_classes: int = 6,
+        hidden_dim: int = 128,
     ):
         """
         An MLP with a single hidden layer
@@ -74,8 +94,12 @@ class MLPClassifier(nn.Module):
             num_classes: int, number of classes
         """
         super().__init__()
-
-        raise NotImplementedError("MLPClassifier.__init__() is not implemented")
+        layers = []
+        layers.append(torch.nn.Flatten())
+        layers.append(torch.nn.Linear(h * w * 3, hidden_dim))  # Always start with a linear layer, then blocks of residual connections
+        layers.append(self.Block(hidden_dim, hidden_dim))
+        layers.append(torch.nn.Linear(hidden_dim, num_classes))
+        self.model = torch.nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -85,7 +109,7 @@ class MLPClassifier(nn.Module):
         Returns:
             tensor (b, num_classes) logits
         """
-        raise NotImplementedError("MLPClassifier.forward() is not implemented")
+        return self.model(x)
 
 
 class MLPClassifierDeep(nn.Module):
@@ -94,6 +118,8 @@ class MLPClassifierDeep(nn.Module):
         h: int = 64,
         w: int = 64,
         num_classes: int = 6,
+        num_layers: int = 2,
+
     ):
         """
         An MLP with multiple hidden layers
