@@ -172,3 +172,4 @@ cython_debug/
 
 # Data for projects
 module1/flowers/
+module2/flowers/
