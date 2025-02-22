@@ -118,8 +118,8 @@ class MLPClassifierDeep(nn.Module):
         h: int = 64,
         w: int = 64,
         num_classes: int = 6,
-        num_layers: int = 2,
-
+        num_layers: int = 4,
+        hidden_dim: int = 128,
     ):
         """
         An MLP with multiple hidden layers
@@ -134,8 +134,15 @@ class MLPClassifierDeep(nn.Module):
             num_layers: int, number of hidden layers
         """
         super().__init__()
-
-        raise NotImplementedError("MLPClassifierDeep.__init__() is not implemented")
+        layers = []
+        layers.append(torch.nn.Flatten())
+        in_channels = h * w * 3
+        for i in range(num_layers-1):
+            layers.append(torch.nn.Linear(in_channels, hidden_dim))
+            layers.append(torch.nn.ReLU())
+            in_channels = hidden_dim
+        layers.append(torch.nn.Linear(hidden_dim, num_classes))
+        self.model = torch.nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -145,15 +152,36 @@ class MLPClassifierDeep(nn.Module):
         Returns:
             tensor (b, num_classes) logits
         """
-        raise NotImplementedError("MLPClassifierDeep.forward() is not implemented")
+        return self.model(x)
 
 
 class MLPClassifierDeepResidual(nn.Module):
+    class Block(torch.nn.Module):
+        def __init__(self, in_channels, out_channels):
+            super().__init__()
+            self.model = torch.nn.Sequential(
+                torch.nn.Linear(in_channels, out_channels),
+                torch.nn.LayerNorm(out_channels),
+                torch.nn.ReLU(),
+            )  # Add a layer before the residual connection
+
+            # Validate the number of input channels matches the number of output channels for the residual connections
+            if in_channels != out_channels:
+                self.skip = torch.nn.Linear(in_channels,
+                                            out_channels)  # Add a linear layer to change the shape and match the output
+            else:
+                self.skip = torch.nn.Identity()
+
+        def forward(self, x):
+            return self.model(x) + self.skip(x)  # By adding `x`, we have added a residual connection
+
     def __init__(
         self,
         h: int = 64,
         w: int = 64,
         num_classes: int = 6,
+        num_layers: int = 6,
+        hidden_dim: int = 128,
     ):
         """
         Args:
@@ -166,8 +194,13 @@ class MLPClassifierDeepResidual(nn.Module):
             num_layers: int, number of hidden layers
         """
         super().__init__()
-
-        raise NotImplementedError("MLPClassifierDeepResidual.__init__() is not implemented")
+        layers = []
+        layers.append(torch.nn.Flatten())
+        in_channels = h * w * 3
+        layers.append(nn.Linear(in_channels, hidden_dim))
+        layers.extend([self.Block(hidden_dim, hidden_dim) for _ in range(num_layers - 1)])
+        layers.append(torch.nn.Linear(hidden_dim, num_classes))
+        self.model = torch.nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -177,7 +210,7 @@ class MLPClassifierDeepResidual(nn.Module):
         Returns:
             tensor (b, num_classes) logits
         """
-        raise NotImplementedError("MLPClassifierDeepResidual.forward() is not implemented")
+        return self.model(x)
 
 
 model_factory = {
