@@ -113,6 +113,18 @@ class MLPClassifier(nn.Module):
 
 
 class MLPClassifierDeep(nn.Module):
+    class Block(torch.nn.Module):
+        def __init__(self, in_channels, out_channels):
+            super().__init__()
+            self.model = torch.nn.Sequential(
+                torch.nn.Linear(in_channels, out_channels),
+                torch.nn.LayerNorm(out_channels),
+                torch.nn.ReLU(),
+            )
+
+        def forward(self, x):
+            return self.model(x)
+
     def __init__(
         self,
         h: int = 64,
@@ -136,11 +148,8 @@ class MLPClassifierDeep(nn.Module):
         super().__init__()
         layers = []
         layers.append(torch.nn.Flatten())
-        in_channels = h * w * 3
-        for i in range(num_layers-1):
-            layers.append(torch.nn.Linear(in_channels, hidden_dim))
-            layers.append(torch.nn.ReLU())
-            in_channels = hidden_dim
+        layers.extend([torch.nn.Linear(h * w* 3, hidden_dim), torch.nn.ReLU()])
+        layers.extend([self.Block(hidden_dim, hidden_dim) for _ in range(num_layers - 1)])
         layers.append(torch.nn.Linear(hidden_dim, num_classes))
         self.model = torch.nn.Sequential(*layers)
 
