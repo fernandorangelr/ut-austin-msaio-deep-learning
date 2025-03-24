@@ -1,23 +1,24 @@
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
 import torch
 import torch.utils.tensorboard as tb
+import time
 
 from .datasets.classification_dataset import load_data, compute_accuracy
 from .models import load_model, save_model, ClassificationLoss
 
 
 def train(
-    exp_dir: str = "logs",
-    model_name: str = "classifier",
-    num_epoch: int = 50,
-    lr: float = 1e-3,
-    batch_size: int = 128,
-    seed: int = 2024,
-    **kwargs,
+        exp_dir: str = "logs",
+        model_name: str = "classifier",
+        num_epoch: int = 50,
+        lr: float = 1e-3,
+        batch_size: int = 128,
+        seed: int = 2024,
+        **kwargs,
 ):
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -40,7 +41,8 @@ def train(
     model = model.to(device)
     model.train()
 
-    train_data = load_data("classification_data/train", transform_pipeline='aug', shuffle=True, batch_size=batch_size, num_workers=2)
+    train_data = load_data("classification_data/train", transform_pipeline='aug', shuffle=True, batch_size=batch_size,
+                           num_workers=2)
     val_data = load_data("classification_data/val", transform_pipeline='aug', shuffle=False)
     # create loss function and optimizer
     loss_func = ClassificationLoss()
@@ -117,5 +119,11 @@ if __name__ == "__main__":
     # optional: additional model hyperparamters
     # parser.add_argument("--num_layers", type=int, default=3)
 
+    start = time.time()
+
     # pass all arguments to train
     train(**vars(parser.parse_args()))
+
+    end = time.time()
+    formatted_time = str(timedelta(seconds=int(end - start)))  # Convert to hh:mm:ss
+    print(f"Training took {formatted_time}")
