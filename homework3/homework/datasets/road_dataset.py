@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import numpy as np
+import torch
 from torch.utils.data import ConcatDataset, DataLoader, Dataset
 
 from . import road_transforms
@@ -110,3 +111,17 @@ def load_data(
         batch_size=batch_size,
         shuffle=shuffle,
     )
+
+
+def compute_accuracy(outputs: torch.Tensor, labels: torch.Tensor):
+    """
+    Arguments:
+        outputs: torch.Tensor, shape (b, num_classes) either logits or probabilities
+        labels: torch.Tensor, shape (b,) with the ground truth class labels
+
+    Returns:
+        a single torch.Tensor scalar
+    """
+    outputs_idx = outputs.max(1)[1].type_as(labels)
+
+    return (outputs_idx == labels).float().mean()

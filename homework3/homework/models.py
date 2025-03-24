@@ -12,7 +12,6 @@ class ClassificationLoss(nn.Module):
     def forward(self, logits: torch.Tensor, target: torch.LongTensor) -> torch.Tensor:
         """
         Multi-class classification loss
-        Hint: simple one-liner
 
         Args:
             logits: tensor (b, c) logits, where c is the number of classes
@@ -22,6 +21,21 @@ class ClassificationLoss(nn.Module):
             tensor, scalar loss
         """
         return torch.nn.functional.cross_entropy(logits, target)
+
+
+class RegressionLoss(nn.Module):
+    def forward(self, logits: torch.Tensor, target: torch.LongTensor) -> torch.Tensor:
+        """
+        Regression loss
+
+        Args:
+            logits: tensor (b, c) logits, where c is the number of classes
+            target: tensor (b,) labels
+
+        Returns:
+            tensor, scalar loss
+        """
+        return torch.nn.functional.mse_loss(logits, target)
 
 
 class Classifier(nn.Module):
@@ -110,10 +124,51 @@ class Classifier(nn.Module):
 
 
 class Detector(torch.nn.Module):
+    class DownBlock(torch.nn.Module):
+        def __init__(self, in_channels: int, out_channels: int):
+            super().__init__()
+            self.model = torch.nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1),  # downsample
+                nn.ReLU(inplace=True),
+                nn.Conv2d(out_channels, out_channels, kernel_size=1),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            )  # Add a layer before the residual connection
+
+            self.skip = nn.Sequential()
+            if in_channels != out_channels:
+                self.skip = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=2)
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return self.model(x) + self.skip(x)  # By adding `x`, we have added a residual connection
+
+    class UpBlock(torch.nn.Module):
+        def __init__(self, in_channels: int, out_channels: int):
+            super().__init__()
+            self.model = nn.Sequential(
+                nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2),  # ×2
+                nn.ConvTranspose2d(out_channels, out_channels, kernel_size=2, stride=2),  # ×2 again
+                nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(out_channels, out_channels, kernel_size=1),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
+            )
+
+            self.skip = nn.Sequential(
+                nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=4),
+                nn.Conv2d(out_channels, out_channels, kernel_size=1)
+            )
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return self.model(x) + self.skip(x)  # By adding `x`, we have added a residual connection
+
     def __init__(
         self,
         in_channels: int = 3,
         num_classes: int = 3,
+        channels_l0: int = 64,
+        n_blocks: int = 2
     ):
         """
         A single model that performs segmentation and depth regression
@@ -121,14 +176,33 @@ class Detector(torch.nn.Module):
         Args:
             in_channels: int, number of input channels
             num_classes: int
+            channels_l0: int
+            n_blocks: int, must be an even number
         """
         super().__init__()
 
         self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN))
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
 
-        # TODO: implement
-        pass
+        cnn_layers = [
+            torch.nn.Conv2d(in_channels, channels_l0, kernel_size=11, stride=2, padding=5),
+            torch.nn.ReLU()
+        ]
+        c1 = channels_l0
+
+        for _ in range(n_blocks // 2):
+            c2 = c1 * 2
+            cnn_layers.append(self.DownBlock(c1, c2))
+            c1 = c2
+
+        for _ in range(n_blocks // 2, n_blocks):
+            c2 = c1 * 2
+            cnn_layers.append(self.UpBlock(c1, c2))
+            c1 = c2
+
+        self.backbone = torch.nn.Sequential(*cnn_layers)
+        self.segmentation_head = torch.nn.Conv2d(c1, num_classes, kernel_size=1)
+        self.depth_head = torch.nn.Conv2d(c1, 1, kernel_size=1)
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -146,9 +220,9 @@ class Detector(torch.nn.Module):
         # optional: normalizes the input
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
-        # TODO: replace with actual forward pass
-        logits = torch.randn(x.size(0), 3, x.size(2), x.size(3))
-        raw_depth = torch.rand(x.size(0), x.size(2), x.size(3))
+        features = self.backbone(z)  # shared encoder
+        logits = self.segmentation_head(features)  # (b, num_classes, h, w)
+        raw_depth = self.depth_head(features).squeeze(1)  # (b, h, w)
 
         return logits, raw_depth
 
