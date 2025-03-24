@@ -167,7 +167,7 @@ class Detector(torch.nn.Module):
         self,
         in_channels: int = 3,
         num_classes: int = 3,
-        channels_l0: int = 32,
+        channels_l0: int = 16,
         n_blocks: int = 2
     ):
         """
