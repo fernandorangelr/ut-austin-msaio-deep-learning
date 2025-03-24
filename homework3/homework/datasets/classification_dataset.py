@@ -1,6 +1,7 @@
 import csv
 from pathlib import Path
 
+import torch
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
@@ -38,8 +39,7 @@ class SuperTuxDataset(Dataset):
             # construct your custom augmentation
             xform = transforms.Compose(
                 [
-                    # TODO: fix
-                    # transforms.ColorJitter(0.9, 0.9, 0.9, 0.1),
+                    transforms.ColorJitter(0.9, 0.9, 0.9, 0.1),
                     transforms.RandomHorizontalFlip(),
                     transforms.ToTensor(),
                 ]
@@ -98,3 +98,17 @@ def load_data(
         shuffle=shuffle,
         drop_last=True,
     )
+
+
+def compute_accuracy(outputs: torch.Tensor, labels: torch.Tensor):
+    """
+    Arguments:
+        outputs: torch.Tensor, shape (b, num_classes) either logits or probabilities
+        labels: torch.Tensor, shape (b,) with the ground truth class labels
+
+    Returns:
+        a single torch.Tensor scalar
+    """
+    outputs_idx = outputs.max(1)[1].type_as(labels)
+
+    return (outputs_idx == labels).float().mean()

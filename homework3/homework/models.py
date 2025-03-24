@@ -8,11 +8,49 @@ INPUT_MEAN = [0.2788, 0.2657, 0.2629]
 INPUT_STD = [0.2064, 0.1944, 0.2252]
 
 
+class ClassificationLoss(nn.Module):
+    def forward(self, logits: torch.Tensor, target: torch.LongTensor) -> torch.Tensor:
+        """
+        Multi-class classification loss
+        Hint: simple one-liner
+
+        Args:
+            logits: tensor (b, c) logits, where c is the number of classes
+            target: tensor (b,) labels
+
+        Returns:
+            tensor, scalar loss
+        """
+        return torch.nn.functional.cross_entropy(logits, target)
+
+
 class Classifier(nn.Module):
+    class Block(torch.nn.Module):
+        def __init__(self, in_channels: int, out_channels: int, stride: int):
+            super().__init__()
+            kernel_size = 3
+            padding = (kernel_size - 1) // 2
+            self.model = torch.nn.Sequential(
+                torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
+                torch.nn.BatchNorm2d(out_channels),
+                torch.nn.ReLU(),
+            )  # Add a layer before the residual connection
+
+            # Validate the number of input channels matches the number of output channels for the residual connections
+            if in_channels != out_channels:
+                self.skip = torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)  # Add a convolutional layer to change the shape and match the output
+            else:
+                self.skip = torch.nn.Identity()
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return self.model(x) + self.skip(x)  # By adding `x`, we have added a residual connection
+
     def __init__(
         self,
         in_channels: int = 3,
         num_classes: int = 6,
+        channels_l0: int = 64,
+        n_blocks: int = 3
     ):
         """
         A convolutional network for image classification.
@@ -26,8 +64,20 @@ class Classifier(nn.Module):
         self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN))
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
 
-        # TODO: implement
-        pass
+        cnn_layers = [
+            torch.nn.Conv2d(in_channels, channels_l0, kernel_size=11, stride=2, padding=5),
+            torch.nn.ReLU()
+        ]
+        c1 = channels_l0
+
+        for _ in range(n_blocks):
+            c2 = c1 * 2
+            cnn_layers.append(self.Block(c1, c2, stride=2))
+            c1 = c2
+
+        cnn_layers.append(torch.nn.Conv2d(c1, num_classes, kernel_size=1))
+        cnn_layers.append(torch.nn.AdaptiveAvgPool2d(1)) # Pool everything together and average the outputs
+        self.network = torch.nn.Sequential(*cnn_layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -40,10 +90,9 @@ class Classifier(nn.Module):
         # optional: normalizes the input
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
-        # TODO: replace with actual forward pass
-        logits = torch.randn(x.size(0), 6)
+        logits = self.network(z) # shape: (b, num_classes, 1, 1)
 
-        return logits
+        return logits.squeeze(-1).squeeze(-1) # shape: (b, num_classes)
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         """
