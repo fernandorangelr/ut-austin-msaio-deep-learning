@@ -9,18 +9,13 @@ INPUT_STD = [0.2064, 0.1944, 0.2252]
 
 
 class ClassificationLoss(nn.Module):
+    def __init__(self, weight=None):
+        super().__init__()
+        self.weight = weight
+
     def forward(self, logits: torch.Tensor, target: torch.LongTensor) -> torch.Tensor:
-        """
-        Multi-class classification loss
+        return torch.nn.functional.cross_entropy(logits, target, weight=self.weight)
 
-        Args:
-            logits: tensor (b, c) logits, where c is the number of classes
-            target: tensor (b,) labels
-
-        Returns:
-            tensor, scalar loss
-        """
-        return torch.nn.functional.cross_entropy(logits, target)
 
 
 class RegressionLoss(nn.Module):
@@ -35,7 +30,7 @@ class RegressionLoss(nn.Module):
         Returns:
             tensor, scalar loss
         """
-        return torch.nn.functional.mse_loss(logits, target)
+        return torch.nn.functional.l1_loss(logits, target)
 
 
 class Classifier(nn.Module):
@@ -165,7 +160,7 @@ class Detector(torch.nn.Module):
             in_channels: int = 3,
             num_classes: int = 3,
             channels_l0=16,
-            depth=4
+            depth=5
     ):
         """
         A single model that performs segmentation and depth regression
@@ -183,6 +178,7 @@ class Detector(torch.nn.Module):
 
         self.down_blocks = nn.ModuleList()
         self.up_blocks = nn.ModuleList()
+        self.concat_convs = nn.ModuleList()
         self.skip_channels = []
 
         # Down path
@@ -197,6 +193,10 @@ class Detector(torch.nn.Module):
         for i in reversed(range(depth - 1)):
             c_out = channels_l0 * (2 ** i)
             self.up_blocks.append(self.UpBlock(c_in, c_out))
+            self.concat_convs.append(nn.Sequential(
+                nn.Conv2d(c_out * 2, c_out, kernel_size=3, padding=1),
+                nn.ReLU()
+            ))
             c_in = c_out
 
         self.final_up = self.UpBlock(c_in, channels_l0)
@@ -205,6 +205,10 @@ class Detector(torch.nn.Module):
             nn.Conv2d(channels_l0, channels_l0, kernel_size=3, padding=1),
             nn.BatchNorm2d(channels_l0),
             nn.ReLU(),
+            nn.Conv2d(channels_l0, channels_l0, kernel_size=3, padding=1),
+            nn.BatchNorm2d(channels_l0),
+            nn.ReLU(),
+            nn.Dropout2d(0.2),
             nn.Conv2d(channels_l0, num_classes, kernel_size=1)
         )
         self.depth_head = nn.Sequential(
@@ -233,22 +237,22 @@ class Detector(torch.nn.Module):
         skips = []
         out = z
 
-        # Down path
         for down in self.down_blocks:
             out = down(out)
             skips.append(out)
 
-        # Remove last skip (deepest one is not skipped)
-        out = skips.pop()
+        out = skips.pop()  # deepest output, no skip for it
 
-        # Up path
         for i, up in enumerate(self.up_blocks):
-            skip = skips.pop()
             out = up(out)
-            if out.shape == skip.shape:
-                out = out + skip
+            skip = skips.pop()
 
-        # Final up to match input resolution
+            if out.shape[2:] != skip.shape[2:]:
+                skip = torch.nn.functional.interpolate(skip, size=out.shape[2:], mode='nearest')
+
+            out = torch.cat([out, skip], dim=1)
+            out = self.concat_convs[i](out)
+
         out = self.final_up(out)
 
         logits = self.segmentation_head(out)

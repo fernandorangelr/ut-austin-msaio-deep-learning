@@ -19,6 +19,7 @@ def train(
         lr: float = 1e-3,
         batch_size: int = 128,
         seed: int = 2024,
+        lambda_reg: int = 0.05,
         **kwargs,
 ):
     if torch.cuda.is_available():
@@ -46,7 +47,7 @@ def train(
                            num_workers=2)
     val_data = load_data("drive_data/val", shuffle=False)
     # create loss function and optimizer
-    classification_loss = ClassificationLoss()
+    classification_loss = ClassificationLoss(weight=torch.tensor([0.01, 0.495, 0.495]).to(device))
     regression_loss = RegressionLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
 
@@ -64,7 +65,7 @@ def train(
 
             loss_cls = classification_loss(logits, seg)
             loss_reg = regression_loss(raw_depth, depth)
-            loss_val = loss_cls + loss_reg  # or weighted sum: loss_cls + λ * loss_reg
+            loss_val = loss_cls + lambda_reg * loss_reg
 
             optimizer.zero_grad()
             loss_val.backward()
@@ -116,6 +117,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_epoch", type=int, default=50)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--seed", type=int, default=2024)
+    parser.add_argument("--lambda_reg", type=int, default=0.05)
 
     # optional: additional model hyperparamters
     # parser.add_argument("--num_layers", type=int, default=3)
