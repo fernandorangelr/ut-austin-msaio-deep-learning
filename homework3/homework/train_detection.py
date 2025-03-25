@@ -122,7 +122,8 @@ if __name__ == "__main__":
     parser.add_argument("--lambda_cls", type=float, default=5)
 
     # optional: additional model hyperparamters
-    # parser.add_argument("--num_layers", type=int, default=3)
+    parser.add_argument("--channels_l0", type=int, default=48)
+    parser.add_argument("--depth", type=int, default=4)
 
     start = time.time()
 
