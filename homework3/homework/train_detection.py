@@ -7,7 +7,7 @@ import torch
 import torch.utils.tensorboard as tb
 import time
 
-from .datasets.road_dataset import load_data, compute_accuracy
+from .datasets.road_dataset import load_data
 from .metrics import DetectionMetric
 from .models import load_model, save_model, ClassificationLoss, RegressionLoss
 
