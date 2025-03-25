@@ -130,12 +130,9 @@ class Detector(torch.nn.Module):
             self.model = torch.nn.Sequential(
                 nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1),  # downsample
                 nn.ReLU(),
-                nn.Conv2d(out_channels, out_channels, kernel_size=1),
-                nn.ReLU(),
-                nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
             )  # Add a layer before the residual connection
 
-            self.skip = nn.Sequential()
+            self.skip = nn.Identity()
             if in_channels != out_channels:
                 self.skip = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=2)
 
@@ -146,19 +143,12 @@ class Detector(torch.nn.Module):
         def __init__(self, in_channels: int, out_channels: int):
             super().__init__()
             self.model = nn.Sequential(
-                nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2),  # ×2
-                nn.ConvTranspose2d(out_channels, out_channels, kernel_size=2, stride=2),  # ×2 again
+                nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2),
                 nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
                 nn.ReLU(),
-                nn.Conv2d(out_channels, out_channels, kernel_size=1),
-                nn.ReLU(),
-                nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
             )
 
-            self.skip = nn.Sequential(
-                nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=4),
-                nn.Conv2d(out_channels, out_channels, kernel_size=1)
-            )
+            self.skip = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
 
         def forward(self, x: torch.Tensor) -> torch.Tensor:
             return self.model(x) + self.skip(x)  # By adding `x`, we have added a residual connection
@@ -167,8 +157,6 @@ class Detector(torch.nn.Module):
         self,
         in_channels: int = 3,
         num_classes: int = 3,
-        channels_l0: int = 16,
-        n_blocks: int = 2
     ):
         """
         A single model that performs segmentation and depth regression
@@ -184,25 +172,19 @@ class Detector(torch.nn.Module):
         self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN))
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
 
-        cnn_layers = [
-            torch.nn.Conv2d(in_channels, channels_l0, kernel_size=11, stride=2, padding=5),
-            torch.nn.ReLU()
-        ]
-        c1 = channels_l0
+        channels_l0 = 16
+        # Stage 0: input → (b, 3, h, w)
+        self.down1 = self.DownBlock(in_channels, channels_l0)  # → (b, channels_l0, h/2, w/2)
+        self.down2 = self.DownBlock(channels_l0, channels_l0 * 2)  # → (b, channels_l0*2, h/4, w/4)
 
-        for _ in range(n_blocks // 2):
-            c2 = c1 * 2
-            cnn_layers.append(self.DownBlock(c1, c2))
-            c1 = c2
+        self.up1 = self.UpBlock(channels_l0 * 2, channels_l0)  # → (b, channels_l0, h/2, w/2)
+        self.up2 = self.UpBlock(channels_l0, channels_l0)  # → (b, channels_l0, h, w)
 
-        for _ in range(n_blocks // 2, n_blocks):
-            c2 = c1 * 2
-            cnn_layers.append(self.UpBlock(c1, c2))
-            c1 = c2
-
-        self.backbone = torch.nn.Sequential(*cnn_layers)
-        self.segmentation_head = torch.nn.Conv2d(c1, num_classes, kernel_size=1)
-        self.depth_head = torch.nn.Conv2d(c1, 1, kernel_size=1)
+        self.segmentation_head = nn.Conv2d(channels_l0, num_classes, kernel_size=1)  # → (b, 3, h, w)
+        self.depth_head = nn.Sequential(
+            nn.Conv2d(channels_l0, 1, kernel_size=1),  # → (b, 1, h, w)
+            nn.Sigmoid()  # Normalize depth to [0, 1]
+        )
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -220,11 +202,16 @@ class Detector(torch.nn.Module):
         # optional: normalizes the input
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
-        features = self.backbone(z)  # shared encoder
-        logits = self.segmentation_head(features)  # (b, num_classes, h, w)
-        raw_depth = self.depth_head(features).squeeze(1)  # (b, h, w)
+        x1 = self.down1(z)  # (b, 16, h/2, w/2)
+        x2 = self.down2(x1)  # (b, 32, h/4, w/4)
 
-        return logits, raw_depth
+        x3 = self.up1(x2)  # (b, 16, h/2, w/2)
+        x4 = self.up2(x3)  # (b, 16, h, w)
+
+        logits = self.segmentation_head(x4)  # (b, 3, h, w)
+        depth = self.depth_head(x4).squeeze(1)  # (b, h, w)
+
+        return logits, depth
 
     def predict(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """

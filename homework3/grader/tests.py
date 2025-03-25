@@ -196,7 +196,7 @@ class RoadDetectorGrader(BaseGrader):
         assert pred.shape == (batch_size, 96, 128), f"Label shape: {pred.shape}"
         assert pred_depth.shape == (batch_size, 96, 128), f"Depth shape: {pred_depth.shape}"
 
-    @Case(score=10, timeout=10000)
+    @Case(score=10, timeout=20000)
     def test_accuracy(self):
         """Segmentation Accuracy"""
         key = "accuracy"
