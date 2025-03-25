@@ -166,7 +166,7 @@ class Detector(torch.nn.Module):
             in_channels: int = 3,
             num_classes: int = 3,
             channels_l0=32,
-            depth=5
+            depth=4
     ):
         """
         A single model that performs segmentation and depth regression
