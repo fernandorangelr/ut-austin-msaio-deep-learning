@@ -8,6 +8,7 @@ import torch.utils.tensorboard as tb
 import time
 
 from .datasets.road_dataset import load_data, compute_accuracy
+from .metrics import DetectionMetric
 from .models import load_model, save_model, ClassificationLoss, RegressionLoss
 
 
@@ -50,12 +51,8 @@ def train(
     optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
 
     global_step = 0
-    metrics = {"train_acc": [], "val_acc": []}
 
     for epoch in range(num_epoch):
-        for key in metrics:
-            metrics[key].clear()
-
         model.train()
 
         for batch in train_data:
@@ -73,8 +70,9 @@ def train(
             loss_val.backward()
             optimizer.step()
 
-            metrics["train_acc"].append(compute_accuracy(logits, seg))
             global_step += 1
+
+        metric_computer = DetectionMetric()
 
         with torch.inference_mode():
             model.eval()
@@ -84,20 +82,23 @@ def train(
                 depth = batch["depth"].to(device)
 
                 logits, raw_depth = model(img)
-                metrics["val_acc"].append(compute_accuracy(logits, seg))
+
+                # Compute metrics using predicted labels and depths
+                preds = torch.argmax(logits, dim=1)  # (B, H, W)
+                metric_computer.add(preds, seg, depth, raw_depth)
 
         # Logging
-        epoch_train_acc = torch.as_tensor(metrics["train_acc"]).mean()
-        epoch_val_acc = torch.as_tensor(metrics["val_acc"]).mean()
-        logger.add_scalar('train_acc', epoch_train_acc, global_step)
-        logger.add_scalar('val_acc', epoch_val_acc, global_step)
+        metrics = metric_computer.compute()
+        logger.add_scalar("val/iou", metrics["iou"], global_step)
+        logger.add_scalar("val/accuracy", metrics["accuracy"], global_step)
+        logger.add_scalar("val/abs_depth_error", metrics["abs_depth_error"], global_step)
+        logger.add_scalar("val/tp_depth_error", metrics["tp_depth_error"], global_step)
 
         if epoch == 0 or epoch == num_epoch - 1 or (epoch + 1) % 10 == 0:
-            print(
-                f"Epoch {epoch + 1:2d}/{num_epoch:2d} | "
-                f"Train Acc: {epoch_train_acc:.4f} | "
-                f"Val Acc: {epoch_val_acc:.4f}"
-            )
+            print(f"Epoch {epoch + 1:2d} | IOU: {metrics['iou']:.4f} | "
+                  f"Accuracy: {metrics['accuracy']:.4f} | "
+                  f"Depth Err: {metrics['abs_depth_error']:.4f} | "
+                  f"TP Depth Err: {metrics['tp_depth_error']:.4f}")
 
     # save and overwrite the model in the root directory for grading
     save_model(model)

@@ -52,7 +52,8 @@ class Classifier(nn.Module):
 
             # Validate the number of input channels matches the number of output channels for the residual connections
             if in_channels != out_channels:
-                self.skip = torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)  # Add a convolutional layer to change the shape and match the output
+                self.skip = torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride,
+                                            padding)  # Add a convolutional layer to change the shape and match the output
             else:
                 self.skip = torch.nn.Identity()
 
@@ -60,11 +61,11 @@ class Classifier(nn.Module):
             return self.model(x) + self.skip(x)  # By adding `x`, we have added a residual connection
 
     def __init__(
-        self,
-        in_channels: int = 3,
-        num_classes: int = 6,
-        channels_l0: int = 64,
-        n_blocks: int = 3
+            self,
+            in_channels: int = 3,
+            num_classes: int = 6,
+            channels_l0: int = 64,
+            n_blocks: int = 3
     ):
         """
         A convolutional network for image classification.
@@ -90,7 +91,7 @@ class Classifier(nn.Module):
             c1 = c2
 
         cnn_layers.append(torch.nn.Conv2d(c1, num_classes, kernel_size=1))
-        cnn_layers.append(torch.nn.AdaptiveAvgPool2d(1)) # Pool everything together and average the outputs
+        cnn_layers.append(torch.nn.AdaptiveAvgPool2d(1))  # Pool everything together and average the outputs
         self.network = torch.nn.Sequential(*cnn_layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -104,9 +105,9 @@ class Classifier(nn.Module):
         # optional: normalizes the input
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
-        logits = self.network(z) # shape: (b, num_classes, 1, 1)
+        logits = self.network(z)  # shape: (b, num_classes, 1, 1)
 
-        return logits.squeeze(-1).squeeze(-1) # shape: (b, num_classes)
+        return logits.squeeze(-1).squeeze(-1)  # shape: (b, num_classes)
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -130,6 +131,9 @@ class Detector(torch.nn.Module):
             self.model = torch.nn.Sequential(
                 nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1),  # downsample
                 nn.ReLU(),
+                nn.Conv2d(out_channels, out_channels, kernel_size=1),
+                nn.ReLU(),
+                nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
             )  # Add a layer before the residual connection
 
             self.skip = nn.Identity()
@@ -146,6 +150,9 @@ class Detector(torch.nn.Module):
                 nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2),
                 nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
                 nn.ReLU(),
+                nn.Conv2d(out_channels, out_channels, kernel_size=1),
+                nn.ReLU(),
+                nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
             )
 
             self.skip = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
@@ -154,9 +161,11 @@ class Detector(torch.nn.Module):
             return self.model(x) + self.skip(x)  # By adding `x`, we have added a residual connection
 
     def __init__(
-        self,
-        in_channels: int = 3,
-        num_classes: int = 3,
+            self,
+            in_channels: int = 3,
+            num_classes: int = 3,
+            channels_l0=16,
+            depth=4
     ):
         """
         A single model that performs segmentation and depth regression
@@ -172,17 +181,36 @@ class Detector(torch.nn.Module):
         self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN))
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
 
-        channels_l0 = 16
-        # Stage 0: input → (b, 3, h, w)
-        self.down1 = self.DownBlock(in_channels, channels_l0)  # → (b, channels_l0, h/2, w/2)
-        self.down2 = self.DownBlock(channels_l0, channels_l0 * 2)  # → (b, channels_l0*2, h/4, w/4)
+        self.down_blocks = nn.ModuleList()
+        self.up_blocks = nn.ModuleList()
+        self.skip_channels = []
 
-        self.up1 = self.UpBlock(channels_l0 * 2, channels_l0)  # → (b, channels_l0, h/2, w/2)
-        self.up2 = self.UpBlock(channels_l0, channels_l0)  # → (b, channels_l0, h, w)
+        # Down path
+        c_in = in_channels
+        for i in range(depth):
+            c_out = channels_l0 * (2 ** i)
+            self.down_blocks.append(self.DownBlock(c_in, c_out))
+            self.skip_channels.append(c_out)
+            c_in = c_out
 
-        self.segmentation_head = nn.Conv2d(channels_l0, num_classes, kernel_size=1)  # → (b, 3, h, w)
+        # Up path (reverse)
+        for i in reversed(range(depth - 1)):
+            c_out = channels_l0 * (2 ** i)
+            self.up_blocks.append(self.UpBlock(c_in, c_out))
+            c_in = c_out
+
+        self.final_up = self.UpBlock(c_in, channels_l0)
+
+        self.segmentation_head = nn.Sequential(
+            nn.Conv2d(channels_l0, channels_l0, kernel_size=3, padding=1),
+            nn.BatchNorm2d(channels_l0),
+            nn.ReLU(),
+            nn.Conv2d(channels_l0, num_classes, kernel_size=1)
+        )
         self.depth_head = nn.Sequential(
-            nn.Conv2d(channels_l0, 1, kernel_size=1),  # → (b, 1, h, w)
+            nn.Conv2d(channels_l0, channels_l0, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(channels_l0, 1, kernel_size=1),
             nn.Sigmoid()  # Normalize depth to [0, 1]
         )
 
@@ -202,14 +230,29 @@ class Detector(torch.nn.Module):
         # optional: normalizes the input
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
-        x1 = self.down1(z)  # (b, 16, h/2, w/2)
-        x2 = self.down2(x1)  # (b, 32, h/4, w/4)
+        skips = []
+        out = z
 
-        x3 = self.up1(x2)  # (b, 16, h/2, w/2)
-        x4 = self.up2(x3)  # (b, 16, h, w)
+        # Down path
+        for down in self.down_blocks:
+            out = down(out)
+            skips.append(out)
 
-        logits = self.segmentation_head(x4)  # (b, 3, h, w)
-        depth = self.depth_head(x4).squeeze(1)  # (b, h, w)
+        # Remove last skip (deepest one is not skipped)
+        out = skips.pop()
+
+        # Up path
+        for i, up in enumerate(self.up_blocks):
+            skip = skips.pop()
+            out = up(out)
+            if out.shape == skip.shape:
+                out = out + skip
+
+        # Final up to match input resolution
+        out = self.final_up(out)
+
+        logits = self.segmentation_head(out)
+        depth = self.depth_head(out).squeeze(1)
 
         return logits, depth
 
@@ -242,9 +285,9 @@ MODEL_FACTORY = {
 
 
 def load_model(
-    model_name: str,
-    with_weights: bool = False,
-    **model_kwargs,
+        model_name: str,
+        with_weights: bool = False,
+        **model_kwargs,
 ) -> torch.nn.Module:
     """
     Called by the grader to load a pre-trained model by name
