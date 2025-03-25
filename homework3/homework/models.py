@@ -141,19 +141,25 @@ class Detector(torch.nn.Module):
     class UpBlock(torch.nn.Module):
         def __init__(self, in_channels: int, out_channels: int):
             super().__init__()
-            self.model = nn.Sequential(
-                nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2),
+            self.up = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
+            self.conv = nn.Sequential(
+                nn.Conv2d(out_channels * 2, out_channels, kernel_size=3, padding=1),
+                nn.BatchNorm2d(out_channels),
+                nn.ReLU(),
                 nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+                nn.BatchNorm2d(out_channels),
                 nn.ReLU(),
-                nn.Conv2d(out_channels, out_channels, kernel_size=1),
-                nn.ReLU(),
-                nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
             )
 
-            self.skip = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
-
-        def forward(self, x: torch.Tensor) -> torch.Tensor:
-            return self.model(x) + self.skip(x)  # By adding `x`, we have added a residual connection
+        def forward(self, x: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
+            x = self.up(x)
+            if x.shape != skip.shape:
+                diffY = skip.size(2) - x.size(2)
+                diffX = skip.size(3) - x.size(3)
+                x = F.pad(x, [diffX // 2, diffX - diffX // 2,
+                              diffY // 2, diffY - diffY // 2])
+            x = torch.cat([x, skip], dim=1)
+            return self.conv(x)
 
     def __init__(
             self,
@@ -178,10 +184,8 @@ class Detector(torch.nn.Module):
 
         self.down_blocks = nn.ModuleList()
         self.up_blocks = nn.ModuleList()
-        self.concat_convs = nn.ModuleList()
         self.skip_channels = []
 
-        # Down path
         c_in = in_channels
         for i in range(depth):
             c_out = channels_l0 * (2 ** i)
@@ -189,17 +193,12 @@ class Detector(torch.nn.Module):
             self.skip_channels.append(c_out)
             c_in = c_out
 
-        # Up path (reverse)
         for i in reversed(range(depth - 1)):
             c_out = channels_l0 * (2 ** i)
             self.up_blocks.append(self.UpBlock(c_in, c_out))
-            self.concat_convs.append(nn.Sequential(
-                nn.Conv2d(c_out * 2, c_out, kernel_size=3, padding=1),
-                nn.ReLU()
-            ))
             c_in = c_out
 
-        self.final_up = self.UpBlock(c_in, channels_l0)
+        self.final_up = nn.ConvTranspose2d(c_in, channels_l0, kernel_size=2, stride=2)
 
         self.segmentation_head = nn.Sequential(
             nn.Conv2d(channels_l0, channels_l0, kernel_size=3, padding=1),
@@ -211,11 +210,12 @@ class Detector(torch.nn.Module):
             nn.Dropout2d(0.2),
             nn.Conv2d(channels_l0, num_classes, kernel_size=1)
         )
+
         self.depth_head = nn.Sequential(
             nn.Conv2d(channels_l0, channels_l0, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(channels_l0, 1, kernel_size=1),
-            nn.Sigmoid()  # Normalize depth to [0, 1]
+            nn.Sigmoid()
         )
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -241,17 +241,11 @@ class Detector(torch.nn.Module):
             out = down(out)
             skips.append(out)
 
-        out = skips.pop()  # deepest output, no skip for it
+        out = skips.pop()
 
-        for i, up in enumerate(self.up_blocks):
-            out = up(out)
+        for up in self.up_blocks:
             skip = skips.pop()
-
-            if out.shape[2:] != skip.shape[2:]:
-                skip = torch.nn.functional.interpolate(skip, size=out.shape[2:], mode='nearest')
-
-            out = torch.cat([out, skip], dim=1)
-            out = self.concat_convs[i](out)
+            out = up(out, skip)
 
         out = self.final_up(out)
 

@@ -20,7 +20,7 @@ def train(
         batch_size: int = 128,
         seed: int = 2024,
         lambda_reg: float = 0.5,
-        lambda_cls: float = 3,
+        lambda_cls: float = 5,
         **kwargs,
 ):
     if torch.cuda.is_available():
@@ -119,7 +119,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-2)
     parser.add_argument("--seed", type=int, default=2024)
     parser.add_argument("--lambda_reg", type=float, default=0.5)
-    parser.add_argument("--lambda_cls", type=float, default=2)
+    parser.add_argument("--lambda_cls", type=float, default=5)
 
     # optional: additional model hyperparamters
     # parser.add_argument("--num_layers", type=int, default=3)
