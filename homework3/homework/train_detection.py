@@ -15,11 +15,12 @@ from .models import load_model, save_model, ClassificationLoss, RegressionLoss
 def train(
         exp_dir: str = "logs",
         model_name: str = "detector",
-        num_epoch: int = 50,
+        num_epoch: int = 30,
         lr: float = 1e-2,
         batch_size: int = 128,
         seed: int = 2024,
-        lambda_reg: float = 0.025,
+        lambda_reg: float = 0.5,
+        lambda_cls: float = 3,
         **kwargs,
 ):
     if torch.cuda.is_available():
@@ -65,7 +66,7 @@ def train(
 
             loss_cls = classification_loss(logits, seg)
             loss_reg = regression_loss(raw_depth, depth)
-            loss_val = loss_cls + lambda_reg * loss_reg
+            loss_val = lambda_cls * loss_cls + lambda_reg * loss_reg
 
             optimizer.zero_grad()
             loss_val.backward()
@@ -114,10 +115,11 @@ if __name__ == "__main__":
 
     parser.add_argument("--exp_dir", type=str, default="logs")
     parser.add_argument("--model_name", type=str, default="detector")
-    parser.add_argument("--num_epoch", type=int, default=50)
+    parser.add_argument("--num_epoch", type=int, default=30)
     parser.add_argument("--lr", type=float, default=1e-2)
     parser.add_argument("--seed", type=int, default=2024)
-    parser.add_argument("--lambda_reg", type=float, default=0.025)
+    parser.add_argument("--lambda_reg", type=float, default=0.5)
+    parser.add_argument("--lambda_cls", type=float, default=2)
 
     # optional: additional model hyperparamters
     # parser.add_argument("--num_layers", type=int, default=3)
