@@ -15,7 +15,7 @@ from .models import load_model, save_model, ClassificationLoss, RegressionLoss
 def train(
         exp_dir: str = "logs",
         model_name: str = "detector",
-        num_epoch: int = 50,
+        num_epoch: int = 100,
         lr: float = 1e-2,
         batch_size: int = 128,
         seed: int = 2024,
@@ -115,7 +115,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--exp_dir", type=str, default="logs")
     parser.add_argument("--model_name", type=str, default="detector")
-    parser.add_argument("--num_epoch", type=int, default=50)
+    parser.add_argument("--num_epoch", type=int, default=100)
     parser.add_argument("--lr", type=float, default=1e-2)
     parser.add_argument("--seed", type=int, default=2024)
     parser.add_argument("--lambda_reg", type=float, default=0.5)
