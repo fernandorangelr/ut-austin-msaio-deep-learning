@@ -42,7 +42,7 @@ class Classifier(nn.Module):
             self.model = torch.nn.Sequential(
                 torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
                 torch.nn.BatchNorm2d(out_channels),
-                torch.nn.ReLU(),
+                torch.nn.LeakyReLU(0.1),
             )  # Add a layer before the residual connection
 
             # Validate the number of input channels matches the number of output channels for the residual connections
@@ -76,7 +76,7 @@ class Classifier(nn.Module):
 
         cnn_layers = [
             torch.nn.Conv2d(in_channels, channels_l0, kernel_size=11, stride=2, padding=5),
-            torch.nn.ReLU()
+            torch.nn.LeakyReLU(0.1)
         ]
         c1 = channels_l0
 
@@ -125,9 +125,9 @@ class Detector(torch.nn.Module):
             super().__init__()
             self.model = torch.nn.Sequential(
                 nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1),  # downsample
-                nn.ReLU(),
+                nn.LeakyReLU(0.1),
                 nn.Conv2d(out_channels, out_channels, kernel_size=1),
-                nn.ReLU(),
+                nn.LeakyReLU(0.1),
                 nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
             )  # Add a layer before the residual connection
 
@@ -145,10 +145,10 @@ class Detector(torch.nn.Module):
             self.conv = nn.Sequential(
                 nn.Conv2d(out_channels * 2, out_channels, kernel_size=3, padding=1),
                 nn.BatchNorm2d(out_channels),
-                nn.ReLU(),
+                nn.LeakyReLU(0.1),
                 nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
                 nn.BatchNorm2d(out_channels),
-                nn.ReLU(),
+                nn.LeakyReLU(0.1),
             )
 
         def forward(self, x: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
@@ -203,17 +203,17 @@ class Detector(torch.nn.Module):
         self.segmentation_head = nn.Sequential(
             nn.Conv2d(channels_l0, channels_l0, kernel_size=3, padding=1),
             nn.BatchNorm2d(channels_l0),
-            nn.ReLU(),
+            nn.LeakyReLU(0.1),
             nn.Conv2d(channels_l0, channels_l0, kernel_size=3, padding=1),
             nn.BatchNorm2d(channels_l0),
-            nn.ReLU(),
+            nn.LeakyReLU(0.1),
             nn.Dropout2d(0.2),
             nn.Conv2d(channels_l0, num_classes, kernel_size=1)
         )
 
         self.depth_head = nn.Sequential(
             nn.Conv2d(channels_l0, channels_l0, kernel_size=3, padding=1),
-            nn.ReLU(),
+            nn.LeakyReLU(0.1),
             nn.Conv2d(channels_l0, 1, kernel_size=1),
             nn.Sigmoid()
         )
