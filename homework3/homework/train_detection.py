@@ -17,7 +17,7 @@ def train(
         model_name: str = "detector",
         num_epoch: int = 100,
         lr: float = 1e-2,
-        batch_size: int = 64,
+        batch_size: int = 16,
         seed: int = 2024,
         lambda_reg: float = 0.5,
         lambda_cls: float = 5,
@@ -118,7 +118,7 @@ if __name__ == "__main__":
     parser.add_argument("--model_name", type=str, default="detector")
     parser.add_argument("--num_epoch", type=int, default=100)
     parser.add_argument("--lr", type=float, default=1e-2)
-    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--seed", type=int, default=2024)
     parser.add_argument("--lambda_reg", type=float, default=0.5)
     parser.add_argument("--lambda_cls", type=float, default=5)
