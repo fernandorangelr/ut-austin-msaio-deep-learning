@@ -17,7 +17,6 @@ class ClassificationLoss(nn.Module):
         return torch.nn.functional.cross_entropy(logits, target, weight=self.weight)
 
 
-
 class RegressionLoss(nn.Module):
     def forward(self, logits: torch.Tensor, target: torch.LongTensor) -> torch.Tensor:
         """
