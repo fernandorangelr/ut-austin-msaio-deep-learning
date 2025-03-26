@@ -9,7 +9,7 @@ import time
 
 from .datasets.road_dataset import load_data
 from .metrics import DetectionMetric
-from .models import load_model, save_model, ClassificationLoss, RegressionLoss
+from .models import load_model, save_model, ClassificationLoss, RegressionLoss, DiceLoss
 
 
 def train(
@@ -49,6 +49,7 @@ def train(
     val_data = load_data("drive_data/val", shuffle=False)
     # create loss function and optimizer
     classification_loss = ClassificationLoss(weight=torch.tensor([0.01, 0.495, 0.495]).to(device))
+    dice_loss = DiceLoss()
     regression_loss = RegressionLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
 
@@ -64,7 +65,7 @@ def train(
 
             logits, raw_depth = model(img)
 
-            loss_cls = classification_loss(logits, seg)
+            loss_cls = classification_loss(logits, seg) + dice_loss(logits, seg)
             loss_reg = regression_loss(raw_depth, depth)
             loss_val = lambda_cls * loss_cls + lambda_reg * loss_reg
 

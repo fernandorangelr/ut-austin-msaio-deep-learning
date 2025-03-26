@@ -17,6 +17,17 @@ class ClassificationLoss(nn.Module):
         return torch.nn.functional.cross_entropy(logits, target, weight=self.weight)
 
 
+class DiceLoss(nn.Module):
+    def forward(self, preds, targets):
+        preds = torch.softmax(preds, dim=1)
+        targets_onehot = nn.functional.one_hot(targets, num_classes=preds.shape[1]).permute(0, 3, 1, 2).float()
+        smooth = 1.
+        intersection = (preds * targets_onehot).sum(dim=(2, 3))
+        union = preds.sum(dim=(2, 3)) + targets_onehot.sum(dim=(2, 3))
+        dice = (2. * intersection + smooth) / (union + smooth)
+        return 1 - dice.mean()
+
+
 class RegressionLoss(nn.Module):
     def forward(self, logits: torch.Tensor, target: torch.LongTensor) -> torch.Tensor:
         """
@@ -41,7 +52,7 @@ class Classifier(nn.Module):
             self.model = torch.nn.Sequential(
                 torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
                 torch.nn.BatchNorm2d(out_channels),
-                torch.nn.LeakyReLU(0.1),
+                torch.nn.ReLU(),
             )  # Add a layer before the residual connection
 
             # Validate the number of input channels matches the number of output channels for the residual connections
@@ -75,7 +86,7 @@ class Classifier(nn.Module):
 
         cnn_layers = [
             torch.nn.Conv2d(in_channels, channels_l0, kernel_size=11, stride=2, padding=5),
-            torch.nn.LeakyReLU(0.1)
+            torch.nn.ReLU()
         ]
         c1 = channels_l0
 
