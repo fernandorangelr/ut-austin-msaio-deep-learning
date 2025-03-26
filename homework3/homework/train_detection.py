@@ -52,6 +52,7 @@ def train(
     dice_loss = DiceLoss()
     regression_loss = RegressionLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epoch)
 
     global_step = 0
 
@@ -72,6 +73,7 @@ def train(
             optimizer.zero_grad()
             loss_val.backward()
             optimizer.step()
+            scheduler.step()
 
             global_step += 1
 
