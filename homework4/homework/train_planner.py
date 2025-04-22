@@ -146,7 +146,7 @@ def train(
                   f"Num samples: {metrics['num_samples']}")
             file_name = f"{model_name}_{epoch + 1}.th"
             torch.save(model.state_dict(), file_name)
-            print(f"Model saved to {log_dir / file_name} on epoch {epoch + 1}")
+            print(f"Model saved to {file_name} on epoch {epoch + 1}")
 
     # save and overwrite the model in the root directory for grading
     save_model(model)

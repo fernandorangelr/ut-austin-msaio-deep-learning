@@ -157,19 +157,27 @@ class TVTransform:
     def __init__(self, tf):
         self.tf = tf
     def __call__(self, sample: dict):
-        img = sample['image']
-        # torchvision transforms expect PIL or Tensor
+        img = sample["image"]
+        if isinstance(img, np.ndarray):
+            # assume float [0,1] or uint8 [0,255]
+            arr = (img * 255).astype(np.uint8) if img.dtype in (np.float32, np.float64) else img
+            # if C×H×W to H×W×C
+            if arr.ndim == 3 and arr.shape[0] in (1, 3, 4):
+                arr = arr.transpose(1, 2, 0)
+            img = Image.fromarray(arr)
         img_tf = self.tf(img)
-        sample['image'] = img_tf
+        sample["image"] = img_tf
         return sample
 
 
 class RandomHorizontalFlip(tv_transforms.RandomHorizontalFlip):
     def __call__(self, sample: dict):
         if np.random.rand() < self.p:
+            # flip image (C,H,W)
             sample["image"] = np.flip(sample["image"], axis=2)
-            sample["track"] = np.flip(sample["track"], axis=1)
-
+            # only flip track if it exists
+            if "track" in sample:
+                sample["track"] = np.flip(sample["track"], axis=1)
         return sample
 
 

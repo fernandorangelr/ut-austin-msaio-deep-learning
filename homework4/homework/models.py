@@ -48,8 +48,8 @@ class MLPPlanner(nn.Module):
             self,
             n_track: int = 10,
             n_waypoints: int = 3,
-            hidden_dim: int = 64,
-            num_layers: int = 3,
+            hidden_dim: int = 128,
+            num_layers: int = 4,
     ):
         """
         Args:
@@ -125,9 +125,9 @@ class TransformerPlanner(nn.Module):
             self,
             n_track: int = 10,
             n_waypoints: int = 3,
-            d_model: int = 64,
+            d_model: int = 128,
             nhead: int = 8,
-            num_layers: int = 2,
+            num_layers: int = 4,
     ):
         super().__init__()
 
