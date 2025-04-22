@@ -204,25 +204,27 @@ class CNNPlanner(torch.nn.Module):
 
         # convolutional backbone
         self.backbone = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=5, stride=2, padding=2),
+            nn.Conv2d(3, 16, kernel_size=5, stride=2, padding=2),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=5, stride=2, padding=2),
+            nn.Conv2d(16, 32, kernel_size=5, stride=2, padding=2),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
             nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
-            nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(),
         )
 
-        # collapse spatial dims to 1×1 → fixed 128 channels
-        self.pool = nn.AdaptiveAvgPool2d(1)
+        # compute flattened feature size:
+        H, W = (96,128)
+        fh, fw = H // 16, W // 16  # 4×stride‑2 reductions
+        feat_dim = 128 * fh * fw
 
         self.head = nn.Sequential(
-            nn.Flatten(), # (B, 128)
-            nn.Linear(256, 256),
+            nn.Flatten(),  # (B, feat_dim)
+            nn.Linear(feat_dim, 128),
             nn.ReLU(inplace=True),
             nn.Dropout(0.2),
-            nn.Linear(256, n_waypoints * 2),
+            nn.Linear(128, n_waypoints * 2),
         )
 
     def forward(self, image: torch.Tensor, **kwargs) -> torch.Tensor:
@@ -237,8 +239,7 @@ class CNNPlanner(torch.nn.Module):
         x = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
         feats = self.backbone(x)
-        feats = self.pool(feats)
-        out = self.head(feats)  # (B, n_waypoints*2)
+        out = self.head(feats)
         B = image.size(0)
         return out.view(B, self.n_waypoints, 2)
 
