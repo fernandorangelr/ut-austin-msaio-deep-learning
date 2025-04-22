@@ -46,6 +46,9 @@ class RoadDataset(Dataset):
             xform = road_transforms.Compose(
                 [
                     road_transforms.ImageLoader(self.episode_path.absolute().as_posix()),
+                    road_transforms.TVTransform(tv_transforms.ToTensor()),
+                    road_transforms.TVTransform(
+                        tv_transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])),
                     road_transforms.EgoTrackProcessor(self.track),
                 ]
             )
