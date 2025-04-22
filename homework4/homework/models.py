@@ -62,15 +62,17 @@ class MLPPlanner(nn.Module):
 
         self.n_track = n_track
         self.n_waypoints = n_waypoints
-        self.hidden_dim = hidden_dim
-        self.num_layers = num_layers
 
         input_dim = n_track * 2 * 2  # left+right, each has n_track x 2 coords
-        dims = [input_dim] + [hidden_dim] * (num_layers - 1) + [n_waypoints * 2]
-
         layers = []
-        for i in range(len(dims) - 1):
-            layers.append(self.Block(dims[i], dims[i + 1]))
+        in_dim = input_dim
+
+        for _ in range(num_layers):
+            layers.append(self.Block(in_dim, hidden_dim))
+            in_dim = hidden_dim
+
+        # final layer: no ReLU, no dropout
+        layers.append(nn.Linear(hidden_dim, n_waypoints * 2))
         self.mlp = nn.Sequential(*layers)
 
     def forward(
