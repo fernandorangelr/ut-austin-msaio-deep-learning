@@ -150,6 +150,20 @@ class DepthLoader(ImageLoader):
         return sample
 
 
+class TVTransform:
+    """
+    Wraps a torchvision transform so it acts on sample['image']
+    """
+    def __init__(self, tf):
+        self.tf = tf
+    def __call__(self, sample: dict):
+        img = sample['image']
+        # torchvision transforms expect PIL or Tensor
+        img_tf = self.tf(img)
+        sample['image'] = img_tf
+        return sample
+
+
 class RandomHorizontalFlip(tv_transforms.RandomHorizontalFlip):
     def __call__(self, sample: dict):
         if np.random.rand() < self.p:
