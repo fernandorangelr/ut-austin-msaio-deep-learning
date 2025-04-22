@@ -29,15 +29,15 @@ DEFAULT_NUM_WORKERS: int = 2
 
 def train(
         model_name: str,
-        exp_dir: str,
-        num_epoch: int,
-        lr: float,
-        batch_size: int,
-        seed: int,
-        transform_pipeline: str,
-        crop_size: tuple[int, int],
-        weight_decay: float,
-        num_workers: int,
+        exp_dir: str = DEFAULT_EXP_DIR,
+        num_epoch: int = DEFAULT_NUM_EPOCH,
+        lr: float = DEFAULT_LR,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+        seed: int = DEFAULT_SEED,
+        transform_pipeline: str = DEFAULT_TRANSFORM_PIPELINE,
+        crop_size: tuple[int, int] = DEFAULT_CROP_SIZE,
+        weight_decay: float = DEFAULT_WEIGHT_DECAY,
+        num_workers: int = DEFAULT_NUM_WORKERS,
         **kwargs,
 ):
     if torch.cuda.is_available():
