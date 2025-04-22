@@ -110,7 +110,7 @@ def train(
             optimizer.step()
 
             train_loss += loss_val.item()
-            logger.add_scalar("train/loss", loss_val.item(), global_step)
+            logger.add_scalar(f"{model_name}/train/loss", loss_val.item(), global_step)
             global_step += 1
 
         metric_computer = PlannerMetric()
@@ -133,10 +133,10 @@ def train(
 
         # Logging
         metrics = metric_computer.compute()
-        logger.add_scalar("val/l1_error", metrics["l1_error"], global_step)
-        logger.add_scalar("val/longitudinal_error", metrics["longitudinal_error"], global_step)
-        logger.add_scalar("val/lateral_error", metrics["lateral_error"], global_step)
-        logger.add_scalar("val/num_samples", metrics["num_samples"], global_step)
+        logger.add_scalar(f"{model_name}/val/l1_error", metrics["l1_error"], global_step)
+        logger.add_scalar(f"{model_name}/val/longitudinal_error", metrics["longitudinal_error"], global_step)
+        logger.add_scalar(f"{model_name}/val/lateral_error", metrics["lateral_error"], global_step)
+        logger.add_scalar(f"{model_name}/val/num_samples", metrics["num_samples"], global_step)
         logger.flush()
 
         if epoch == 0 or epoch == num_epoch - 1 or (epoch + 1) % 10 == 0:
