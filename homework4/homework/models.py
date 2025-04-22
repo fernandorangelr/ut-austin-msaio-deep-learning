@@ -38,7 +38,9 @@ class MLPPlanner(nn.Module):
             super().__init__()
             self.net = nn.Sequential(
                 nn.Linear(in_dim, out_dim),
-                nn.ReLU(inplace=True)
+                nn.LayerNorm(out_dim),
+                nn.ReLU(inplace=True),
+                nn.Dropout(0.1),
             )
 
         def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -137,11 +139,16 @@ class TransformerPlanner(nn.Module):
         self.point_encoder = nn.Linear(2, d_model)
         self.query_embed = nn.Embedding(n_waypoints, d_model)
 
-        # stack of decoder blocks
-        self.decoder_blocks = nn.ModuleList([
-            self.DecoderBlock(d_model, nhead, dim_feedforward=4 * d_model)
-            for _ in range(num_layers)
-        ])
+        decoder_layer = nn.TransformerDecoderLayer(
+            d_model = d_model,
+            nhead = nhead,
+            dim_feedforward = 4 * d_model,
+            dropout = 0.1,
+        )
+        self.transformer_decoder = nn.TransformerDecoder(
+            decoder_layer,
+            num_layers = num_layers,
+        )
         self.output_proj = nn.Linear(d_model, 2)
 
     def forward(
@@ -164,19 +171,21 @@ class TransformerPlanner(nn.Module):
             torch.Tensor: future waypoints with shape (b, n_waypoints, 2)
         """
         B = track_left.size(0)
-        x = torch.cat([track_left, track_right], dim=1)
+
+        x = torch.cat([track_left, track_right], dim=1)  # (B, 2*n_track, 2)
+
         memory = self.point_encoder(x)  # (B, 2*n_track, d_model)
-        memory = memory.permute(1, 0, 2)  # (S, B, d_model)
+        memory = memory.permute(1, 0, 2)  # (S=2*n_track, B, d_model)
 
-        idx = torch.arange(self.n_waypoints, device=track_left.device)
-        tgt = self.query_embed(idx).unsqueeze(1).repeat(1, B, 1)  # (T, B, d_model)
+        idx = torch.arange(self.n_waypoints, device=x.device)
+        tgt = self.query_embed(idx)  # (T, d_model)
+        tgt = tgt.unsqueeze(1).repeat(1, B, 1)  # (T, B, d_model)
 
-        # pass through each decoder block
-        for block in self.decoder_blocks:
-            tgt = block(tgt, memory)
+        out = self.transformer_decoder(tgt=tgt, memory=memory)  # (T, B, d_model)
 
-        out = self.output_proj(tgt)  # (T, B, 2)
-        return out.permute(1, 0, 2)  # (B, T, 2)
+        out = self.output_proj(out)  # (T, B, 2)
+
+        return out.permute(1, 0, 2).contiguous()
 
 
 class CNNPlanner(torch.nn.Module):
@@ -193,13 +202,13 @@ class CNNPlanner(torch.nn.Module):
 
         # convolutional backbone
         self.backbone = nn.Sequential(
-            nn.Conv2d(3, 16, kernel_size=5, stride=2, padding=2),
+            nn.Conv2d(3, 32, kernel_size=5, stride=2, padding=2),
             nn.ReLU(),
-            nn.Conv2d(16, 32, kernel_size=5, stride=2, padding=2),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(32, 64, kernel_size=5, stride=2, padding=2),
             nn.ReLU(),
             nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
         )
 
@@ -208,8 +217,9 @@ class CNNPlanner(torch.nn.Module):
 
         self.head = nn.Sequential(
             nn.Flatten(), # (B, 128)
-            nn.Linear(128, 256),
+            nn.Linear(256, 256),
             nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
             nn.Linear(256, n_waypoints * 2),
         )
 

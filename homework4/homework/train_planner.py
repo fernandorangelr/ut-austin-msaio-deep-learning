@@ -4,6 +4,7 @@ Usage:
 """
 
 import argparse
+import math
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -15,6 +16,7 @@ import torch.utils.tensorboard as tb
 from .datasets.road_dataset import load_data
 from .metrics import PlannerMetric
 from .models import load_model, save_model, RegressionLoss, CNNPlanner
+from torch.optim.lr_scheduler import LambdaLR
 
 DEFAULT_EXP_DIR: str = 'logs'
 DEFAULT_NUM_EPOCH: int = 50
@@ -81,6 +83,18 @@ def train(
     regression_loss = RegressionLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
 
+    total_steps = num_epoch * len(train_data)
+    warmup_steps = total_steps // 10
+
+    def lr_lambda(step: int):
+        if step < warmup_steps:
+            return float(step) / float(max(1, warmup_steps))
+        # cosine decay after warmup
+        progress = float(step - warmup_steps) / float(max(1, total_steps - warmup_steps))
+        return 0.5 * (1.0 + math.cos(math.pi * progress))
+
+    scheduler = LambdaLR(optimizer, lr_lambda)
+
     global_step = 0
     # training loop
     for epoch in range(num_epoch):
@@ -107,11 +121,17 @@ def train(
 
             optimizer.zero_grad()
             loss_val.backward()
+            # gradient clipping to max norm 1.0
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
 
             train_loss += loss_val.item()
             logger.add_scalar(f"{model_name}/train/loss", loss_val.item(), global_step)
             global_step += 1
+
+        scheduler.step()
+        avg_train_loss = train_loss / len(train_data)
+        logger.add_scalar(f"{model_name}/train/avg_loss", avg_train_loss, epoch)
 
         metric_computer = PlannerMetric()
 

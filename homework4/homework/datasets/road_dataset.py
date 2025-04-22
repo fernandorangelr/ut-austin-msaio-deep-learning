@@ -60,6 +60,7 @@ class RoadDataset(Dataset):
                 road_transforms.ImageLoader(self.episode_path.as_posix()),
                 road_transforms.TVTransform(tv_transforms.RandomResizedCrop(size=crop_size, antialias=True)),
                 road_transforms.RandomHorizontalFlip(),
+                road_transforms.TVTransform(tv_transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2)),
                 road_transforms.TVTransform(tv_transforms.ToTensor()),
                 road_transforms.TVTransform(tv_transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])),
                 road_transforms.EgoTrackProcessor(self.track),
