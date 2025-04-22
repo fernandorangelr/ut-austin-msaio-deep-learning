@@ -202,14 +202,14 @@ class CNNPlanner(torch.nn.Module):
             nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
         )
-        # feature map dims for input 3×96×128 -> 128×6×8
-        feat_h, feat_w = 6, 8
-        feat_dim = 128 * feat_h * feat_w
+
+        # collapse spatial dims to 1×1 → fixed 128 channels
+        self.pool = nn.AdaptiveAvgPool2d(1)
 
         self.head = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(feat_dim, 256),
-            nn.ReLU(),
+            nn.Flatten(), # (B, 128)
+            nn.Linear(128, 256),
+            nn.ReLU(inplace=True),
             nn.Linear(256, n_waypoints * 2),
         )
 
@@ -225,6 +225,7 @@ class CNNPlanner(torch.nn.Module):
         x = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
         feats = self.backbone(x)
+        feats = self.pool(feats)
         out = self.head(feats)  # (B, n_waypoints*2)
         B = image.size(0)
         return out.view(B, self.n_waypoints, 2)

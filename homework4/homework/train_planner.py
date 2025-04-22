@@ -118,12 +118,17 @@ def train(
         with torch.inference_mode():
             model.eval()
             for batch in val_data:
-                tl = batch["track_left"].to(device)
-                tr = batch["track_right"].to(device)
+                if isinstance(model, CNNPlanner):
+                    inputs = batch['image'].to(device)
+                    preds = model(image=inputs)
+                else:
+                    tl = batch['track_left'].to(device)
+                    tr = batch['track_right'].to(device)
+                    preds = model(track_left=tl, track_right=tr)
+
                 tgt = batch["waypoints"].to(device)
                 mask = batch["waypoints_mask"].to(device).bool()
 
-                preds = model(track_left=tl, track_right=tr)
                 metric_computer.add(preds, tgt, mask)
 
         # Logging
@@ -164,7 +169,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_workers", type=int, default=DEFAULT_NUM_WORKERS)
     parser.add_argument("--transform_pipeline", type=str, default=DEFAULT_TRANSFORM_PIPELINE,
                         choices=["state_only","default","aug"])
-    parser.add_argument("--crop_size", type=tuple[int, int], default=DEFAULT_CROP_SIZE,
+    parser.add_argument("--crop_size", type=tuple[int, int], nargs=2, default=DEFAULT_CROP_SIZE,
                         help="Required for aug pipeline, e.g. --crop_size 128 128")
     parser.add_argument("--weight_decay", type=float, default=DEFAULT_WEIGHT_DECAY)
 
