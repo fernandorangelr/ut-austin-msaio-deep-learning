@@ -223,7 +223,7 @@ class CNNPlanner(torch.nn.Module):
             nn.Flatten(),  # (B, feat_dim)
             nn.Linear(feat_dim, 128),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.1),
+            nn.Dropout(0.2),
             nn.Linear(128, n_waypoints * 2),
         )
 
@@ -238,14 +238,9 @@ class CNNPlanner(torch.nn.Module):
         x = image
         x = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
-        B, C, H, W = x.shape
-        # build coord channels in [-1,1]
-        ys = torch.linspace(-1, 1, H, device=x.device).view(1, 1, H, 1).expand(B, 1, H, W)
-        xs = torch.linspace(-1, 1, W, device=x.device).view(1, 1, 1, W).expand(B, 1, H, W)
-        x = torch.cat([x, ys, xs], dim=1)  # (B,5,H,W)
-
         feats = self.backbone(x)
         out = self.head(feats)
+        B = image.size(0)
         return out.view(B, self.n_waypoints, 2)
 
 
